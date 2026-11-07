@@ -3,6 +3,7 @@ from http import HTTPStatus
 from unittest.mock import MagicMock
 
 import pytest
+from django.urls import resolve
 from ninja.responses import Response
 
 from apps.api.rest.v0.release import (
@@ -171,3 +172,67 @@ class TestGetRelease:
 
         assert isinstance(result, Response)
         assert result.status_code == HTTPStatus.NOT_FOUND
+
+    @pytest.mark.parametrize(
+        "tag_name",
+        [
+            "v1.0.0",
+            "gopls/v0.24.0",
+            "helm/chart/v1.2.3",
+            "release/v2.1.0-alpha",
+        ],
+    )
+    def test_get_release_with_slash_tag_name(self, mocker, tag_name):
+        """Test getting a release whose tag contains slashes."""
+        mock_release = MagicMock()
+        mock_qs = MagicMock()
+        mock_qs.get.return_value = mock_release
+        mocker.patch(
+            "apps.api.rest.v0.release.ReleaseModel.objects",
+            mock_qs,
+        )
+
+        request = MagicMock()
+        result = get_release(request, "OWASP", "Nest", tag_name)
+
+        assert result == mock_release
+        mock_qs.get.assert_called_once_with(
+            repository__organization__login__iexact="OWASP",
+            repository__name__iexact="Nest",
+            tag_name=tag_name,
+        )
+
+
+class TestReleaseRouting:
+    """Tests for release route resolution."""
+
+    @pytest.mark.parametrize(
+        ("url", "expected_org", "expected_repo", "expected_tag"),
+        [
+            ("/api/v0/releases/OWASP/Nest/v1.0.0", "OWASP", "Nest", "v1.0.0"),
+            (
+                "/api/v0/releases/golang/tools/gopls/v0.24.0",
+                "golang",
+                "tools",
+                "gopls/v0.24.0",
+            ),
+            (
+                "/api/v0/releases/helm/charts/sub/chart/v1.0.0",
+                "helm",
+                "charts",
+                "sub/chart/v1.0.0",
+            ),
+        ],
+    )
+    def test_release_detail_url_resolves_with_slashes(
+        self,
+        url,
+        expected_org,
+        expected_repo,
+        expected_tag,
+    ):
+        """Test that release detail route correctly captures tag names with slashes."""
+        match = resolve(url)
+        assert match.kwargs["organization_id"] == expected_org
+        assert match.kwargs["repository_id"] == expected_repo
+        assert match.kwargs["release_id"] == expected_tag
