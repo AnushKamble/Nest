@@ -3,7 +3,7 @@ from http import HTTPStatus
 from unittest.mock import MagicMock
 
 import pytest
-from django.urls import resolve
+from django.urls import Resolver404, resolve
 from ninja.responses import Response
 
 from apps.api.rest.v0.release import (
@@ -222,6 +222,12 @@ class TestReleaseRouting:
                 "charts",
                 "sub/chart/v1.0.0",
             ),
+            (
+                "/api/v0/releases/OWASP/Nest/gopls%2Fv0.24.0",
+                "OWASP",
+                "Nest",
+                "gopls%2Fv0.24.0",
+            ),
         ],
     )
     def test_release_detail_url_resolves_with_slashes(
@@ -236,3 +242,8 @@ class TestReleaseRouting:
         assert match.kwargs["organization_id"] == expected_org
         assert match.kwargs["repository_id"] == expected_repo
         assert match.kwargs["release_id"] == expected_tag
+
+    def test_release_detail_url_empty_tag_not_matched(self):
+        """Test that release detail route does not match when tag is missing."""
+        with pytest.raises(Resolver404):
+            resolve("/api/v0/releases/OWASP/Nest/")
